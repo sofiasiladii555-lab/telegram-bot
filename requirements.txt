@@ -1,0 +1,15 @@
+aiogram==3.27.0
+pandas
+openpyxl
+sqlalchemy
+apscheduler
+python-dotenv
+loguru
+aiogram==3.27.0
+apscheduler
+loguru
+openpyxl
+pandas
+python-dotenv
+sqlalchemy
+aiohttp
