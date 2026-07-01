@@ -7,20 +7,23 @@ from aiogram.types import BotCommand, BotCommandScopeDefault, BotCommandScopeCha
 from config import BOT_TOKEN, ADMIN_IDS
 from database import init_db
 from handlers.common import router as common_router
-from handlers.admin import router as admin_router, scheduler, schedule_all_reminders
+from handlers.admin import router as admin_router, scheduler, schedule_all_reminders, schedule_all_duties
 from handlers.user import router as user_router
 from loguru import logger
 
 USER_COMMANDS = [
     BotCommand(command="start", description="Запустить бота"),
-    BotCommand(command="mytasks", description="Мои предстоящие задания"),
+    BotCommand(command="mytasks", description="Все мои предстоящие задания"),
+    BotCommand(command="nexttask", description="Задания на ближайшую встречу"),
 ]
 
 ADMIN_COMMANDS = [
     BotCommand(command="start", description="Запустить бота"),
-    BotCommand(command="mytasks", description="Мои предстоящие задания"),
+    BotCommand(command="mytasks", description="Все мои предстоящие задания"),
+    BotCommand(command="nexttask", description="Задания на ближайшую встречу"),
     BotCommand(command="upload_performance", description="Загрузить график выступлений (Excel)"),
-    BotCommand(command="upload_translation", description="Загрузить график переводов (Excel)"),
+    BotCommand(command="upload_translation", description="Загрузить график заданий (Excel)"),
+    BotCommand(command="upload_duty", description="Загрузить график дежурств группы (Excel)"),
     BotCommand(command="list_users", description="Список зарегистрированных участников"),
     BotCommand(command="admin_tasks", description="Все предстоящие задания участников"),
     BotCommand(command="delete_tasks", description="Очистить все задания из базы"),
@@ -67,6 +70,7 @@ async def main():
 
     await setup_commands(bot)
     await schedule_all_reminders(bot)
+    await schedule_all_duties(bot)
     logger.info("📅 Напоминания из БД перепланированы")
 
     await run_health_server()
