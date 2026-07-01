@@ -1,17 +1,17 @@
 import pandas as pd
-from datetime import datetime
-from database import Session, Task, User
+from datetime import datetime, time
+from database import Session, Task, Duty, User
 from loguru import logger
 
 
 async def parse_and_save_excel_from_bytes(file_path: str, task_type: str, bot, admin_id: int):
-    """Парсер для файла на диске (принимает путь к файлу)"""
+    """Парсер для файла на диске (принимает путь к файлу).
+    Столбцы Excel: Дата, Время (необязательно), Задание, Telegram_Username / Full_Name / Telegram_ID, Неделя
+    """
     try:
         df = pd.read_excel(file_path)
-
         df.columns = [str(col).strip() for col in df.columns]
 
-        # Обязательна хотя бы одна колонка для идентификации пользователя
         if "Дата" not in df.columns:
             raise Exception("В Excel нет обязательной колонки 'Дата'.\nПроверь заголовки!")
         if "Задание" not in df.columns:
@@ -29,11 +29,24 @@ async def parse_and_save_excel_from_bytes(file_path: str, task_type: str, bot, a
         for _, row in df.iterrows():
             try:
                 due_date = pd.to_datetime(row["Дата"]).to_pydatetime()
+
+                # Если есть столбец Время — объединяем с датой
+                raw_time = str(row.get("Время", "")).strip()
+                if raw_time and raw_time not in ("nan", "none", ""):
+                    try:
+                        parsed_time = pd.to_datetime(raw_time).time()
+                        due_date = due_date.replace(
+                            hour=parsed_time.hour,
+                            minute=parsed_time.minute,
+                            second=0
+                        )
+                    except Exception:
+                        pass
+
                 description = str(row["Задание"]).strip()
                 week = str(row.get("Неделя", "")).strip()
 
-                # Получаем идентификаторы из строки
-                raw_tg_id   = str(row.get("Telegram_ID", "")).strip()
+                raw_tg_id    = str(row.get("Telegram_ID", "")).strip()
                 raw_username = str(row.get("Telegram_Username", "")).strip().lower().replace("@", "")
                 raw_fullname = str(row.get("Full_Name", "")).strip()
 
@@ -42,16 +55,10 @@ async def parse_and_save_excel_from_bytes(file_path: str, task_type: str, bot, a
                 fullname = raw_fullname if raw_fullname not in ("", "nan", "none") else None
 
                 user = None
-
-                # Шаг 1: по Telegram ID (самый надёжный)
                 if tg_id:
                     user = session.query(User).filter(User.tg_id == tg_id).first()
-
-                # Шаг 2: по username
                 if not user and username:
                     user = session.query(User).filter(User.username.ilike(username)).first()
-
-                # Шаг 3: по full_name
                 if not user and fullname:
                     user = session.query(User).filter(User.full_name.ilike(fullname)).first()
 
@@ -76,7 +83,7 @@ async def parse_and_save_excel_from_bytes(file_path: str, task_type: str, bot, a
         session.commit()
         session.close()
 
-        msg = f"✅ Успешно добавлено **{added}** заданий типа '{task_type}'."
+        msg = f"✅ Успешно добавлено *{added}* заданий типа '{task_type}'."
         if not_found:
             msg += (
                 f"\n\n⚠️ Не найдены пользователи ({len(not_found)} чел.):\n"
@@ -84,8 +91,61 @@ async def parse_and_save_excel_from_bytes(file_path: str, task_type: str, bot, a
                 f"Эти люди ещё не писали боту /start или имя указано неверно."
             )
 
-        await bot.send_message(admin_id, msg)
+        await bot.send_message(admin_id, msg, parse_mode="Markdown")
 
     except Exception as e:
         await bot.send_message(admin_id, f"❌ Ошибка при чтении Excel:\n{str(e)}")
         logger.error(f"Парсер ошибка: {e}")
+
+
+async def parse_and_save_duty_excel(file_path: str, bot, admin_id: int):
+    """Парсер графика дежурств группы.
+    Столбцы Excel: Дата, Время
+    """
+    try:
+        df = pd.read_excel(file_path)
+        df.columns = [str(col).strip() for col in df.columns]
+
+        if "Дата" not in df.columns:
+            raise Exception("В Excel нет обязательной колонки 'Дата'.\nПроверь заголовки!")
+        if "Время" not in df.columns:
+            raise Exception("В Excel нет обязательной колонки 'Время'.\nПроверь заголовки!")
+
+        session = Session()
+        added = 0
+
+        for _, row in df.iterrows():
+            try:
+                duty_date = pd.to_datetime(row["Дата"]).to_pydatetime()
+
+                raw_time = str(row.get("Время", "")).strip()
+                if raw_time and raw_time not in ("nan", "none", ""):
+                    try:
+                        parsed_time = pd.to_datetime(raw_time).time()
+                        duty_date = duty_date.replace(
+                            hour=parsed_time.hour,
+                            minute=parsed_time.minute,
+                            second=0
+                        )
+                    except Exception:
+                        pass
+
+                duty = Duty(duty_date=duty_date)
+                session.add(duty)
+                added += 1
+
+            except Exception as row_e:
+                logger.error(f"Ошибка обработки строки дежурства: {row_e}")
+
+        session.commit()
+        session.close()
+
+        await bot.send_message(
+            admin_id,
+            f"✅ Успешно добавлено *{added}* дат дежурств группы.",
+            parse_mode="Markdown"
+        )
+
+    except Exception as e:
+        await bot.send_message(admin_id, f"❌ Ошибка при чтении Excel дежурств:\n{str(e)}")
+        logger.error(f"Парсер дежурств ошибка: {e}")
