@@ -17,12 +17,13 @@ async def cmd_start(message: Message):
         session.add(new_user)
         session.commit()
     session.close()
-    
+
     await message.answer(
         f"👋 Привет! Я бот-напоминалка о твоих обязанностях.\n\n"
         f"Ты автоматически зарегистрирован. Админ скоро загрузит расписание.\n\n"
         f"🆔 Твой Telegram ID: <code>{message.from_user.id}</code>\n"
         f"(сообщи его администратору если у тебя нет username)\n\n"
-        f"📋 /mytasks — посмотреть свои предстоящие задания",
+        f"📋 /mytasks — все предстоящие задания\n"
+        f"📅 /nexttask — задания только на ближайшую встречу",
         parse_mode="HTML"
     )
